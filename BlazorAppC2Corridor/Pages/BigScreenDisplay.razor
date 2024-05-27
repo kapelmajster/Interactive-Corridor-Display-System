@@ -1,0 +1,200 @@
+﻿@page "/BigScreens/Display/{Id:int}"
+@inject ApplicationDbContext Context
+@inject NavigationManager NavigationManager
+@using BlazorAppC2Corridor.Models
+@using ModifyLayoutExample.Services;
+@using MudBlazor
+@inject ViewTailoringService ViewTailoring
+@inject IJSRuntime JSRuntime
+@using System.Timers
+@using BlazorAppC2Corridor.Enums
+
+
+<div class="container">
+    <div class="row">
+        <div class="col-md-10">
+            <MudCarousel @ref="carouselElement" Class="mud-width-full"
+                         Style="height:2500px;"
+                         ShowArrows="false"
+                         ShowBullets="false"
+                         EnableSwipeGesture="false"
+                         AutoCycle="false"
+                         TData="BigScreenCarousel">
+                @if (carouselContents != null)
+                {
+                    foreach (var content in carouselContents)
+                    {
+                        CarouselContent carouselContent = content.CarouselContent;
+                        MudBlazor.Transition mudBlazorTransition = ConvertToMudBlazorTransition(content.CarouselContent.TransitionType);
+                        <MudCarouselItem Transition="@mudBlazorTransition">
+                            <div class="carousel-media-container">
+                                @if (string.Equals(content.CarouselContent.ContentType.ToString(), "Image", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <img class="carousel-media-image" src="@($"api/File/{content.CarouselContent.FileId}")" alt="@content.CarouselContent.ContentName" />
+                                }
+                                else if (string.Equals(content.CarouselContent.ContentType.ToString(), "Video", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <video id="@($"video-{content.CarouselContent.Id}")" class="carousel-media-video" controls autoplay>
+                                        <source src="@($"api/File/{content.CarouselContent.FileId}")" type="@content.CarouselContent.File.ContentType">
+                                        Your browser does not support the video tag.
+                                    </video>
+                                }
+                                else if (string.Equals(content.CarouselContent.ContentType.ToString(), "Text", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <div class="carousel-media">
+                                        @TextContent(carouselContent)
+                                    </div>
+                                }
+
+                            </div>
+                        </MudCarouselItem>
+                    }
+                }
+
+            </MudCarousel>
+        </div>
+    </div>
+</div>
+<button style="position: fixed; bottom: 10px; left: 10px;" @onclick="DisplayBigScreen">
+    University of Bolton
+</button>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private List<BigScreenCarousel>? carouselContents;
+    private int? averageDuration;
+    private Dictionary<int, ElementReference> videoRefs = new Dictionary<int, ElementReference>();
+    private Timer carouselTimer;
+    private int Index { get; set; } = 0;
+    private MudCarousel<BigScreenCarousel> carouselElement;
+
+
+    private async Task OnCarouselIndexChanged(int index)
+    {
+        Index = index;
+        StartCarouselTimer();
+    }
+
+    private void StartCarouselTimer()
+    {
+        if (carouselTimer != null)
+        {
+            carouselTimer.Stop();
+            carouselTimer.Dispose();
+        }
+
+        if (carouselContents == null || !carouselContents.Any()) return;
+
+        carouselTimer = new Timer
+            {
+                Interval = carouselContents[Index].CarouselContent.Duration.TotalMilliseconds,
+                AutoReset = false,
+                Enabled = true
+            };
+        carouselTimer.Elapsed += OnCarouselTimerElapsed;
+    }
+
+    private async void OnCarouselTimerElapsed(object sender, ElapsedEventArgs e)
+    {
+        carouselTimer.Stop();
+
+        Index = (Index + 1) % carouselContents.Count;
+
+        await InvokeAsync(() =>
+        {
+            carouselElement.SelectedIndex = Index;
+            StateHasChanged();
+        });
+
+        StartCarouselTimer();
+    }
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var bigScreen = await Context.BigScreen.Include(bs => bs.BigScreenCarousels).ThenInclude(cc => cc.CarouselContent.File).FirstOrDefaultAsync(bs => bs.Id == Id);
+
+        DateTime currentDate = DateTime.Now;
+        carouselContents = bigScreen?.BigScreenCarousels
+            .Where(c => (c.CarouselContent.EmbargoDate == null || c.CarouselContent.EmbargoDate <= currentDate) && (c.CarouselContent.ExpiryDate == null || c.CarouselContent.ExpiryDate >= currentDate))
+            .OrderBy(c => c.CarouselContent.Priority.HasValue ? c.CarouselContent.Priority.Value : int.MaxValue)
+            .ToList();
+
+        if (carouselContents != null && carouselContents.Any())
+        {
+            averageDuration = (int)carouselContents.Average(c => c.CarouselContent.Duration.TotalSeconds);
+        }
+
+        StartCarouselTimer();
+    }
+
+
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        const double defaultDurationForTextContent = 20; 
+
+        if (firstRender && carouselContents != null)
+        {
+            var durations = carouselContents.Select(c => c.CarouselContent.Duration.TotalSeconds != 0 ? c.CarouselContent.Duration.TotalSeconds : defaultDurationForTextContent).ToArray();
+            await JSRuntime.InvokeVoidAsync("carouselManager.setupCarousel", carouselElement, durations);
+        }
+    }
+
+
+    public void Dispose()
+    {
+        carouselTimer?.Dispose();
+    }
+
+    private MudBlazor.Transition ConvertToMudBlazorTransition(BlazorAppC2Corridor.Enums.Transition transition)
+    {
+        switch (transition)
+        {
+            case BlazorAppC2Corridor.Enums.Transition.Fade:
+                return MudBlazor.Transition.Fade;
+            case BlazorAppC2Corridor.Enums.Transition.Slide:
+                return MudBlazor.Transition.Slide;
+            default:
+                return MudBlazor.Transition.None;
+        }
+    }
+
+    private void DisplayBigScreen()
+    {
+        ViewTailoring.ToggleElement(ToggledElements.NavigationBarArea);
+        ViewTailoring.ToggleElement(ToggledElements.LoginAboutArea);
+    }
+
+    private async Task ResetAndPlayVideo(int contentId)
+    {
+        await JSRuntime.InvokeVoidAsync("resetAndPlayVideo", $"video-{contentId}");
+    }
+
+    private async Task SetupVideoLoop(int contentId)
+    {
+        await JSRuntime.InvokeVoidAsync("setupVideoLoop", $"video-{contentId}");
+    }
+
+    private RenderFragment TextContent(CarouselContent content) => builder =>
+    {
+        string textAlign = GetTextAlignFromLayoutType(content.LayoutType);
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", $"carousel-content-layout {textAlign}");
+        builder.AddAttribute(2, "style", $"font-family: {content.FontType.ToString()}; font-size: {content.FontSize}px;");
+        builder.AddContent(3, (MarkupString)content.TextContent);
+        builder.CloseElement();
+    };
+
+    private string GetTextAlignFromLayoutType(LayoutType layoutType)
+    {
+        return layoutType switch
+        {
+            LayoutType.SingleColumn => "single-column",
+            LayoutType.DoubleColumn => "double-column",
+            LayoutType.TripleColumn => "triple-column",
+            _ => "single-column",
+        };
+    }
+
+}

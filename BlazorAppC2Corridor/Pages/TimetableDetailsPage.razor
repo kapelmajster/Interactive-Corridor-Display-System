@@ -1,0 +1,168 @@
+﻿@attribute [Authorize(Roles = $"{Roles.Admin}, {Roles.SmallScreen}")]
+@page "/Timetables/{Id:int}"
+@using System
+@using System.Text.Json;
+@inherits EditablePageBase
+
+
+<h1>@Mode.ToString() Timetable </h1>
+<EditForm Model="TimetableData" OnValidSubmit="HandleValidTimetableSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    @if (@Id != 0)
+    {
+        <div class="my-3">
+            <label>Id</label>
+            <InputNumber class="form-control"
+                     @bind-Value="TimetableData.Id"
+                     readonly />
+        </div>
+    }
+    <div class="my-3">
+        <label>Module Code</label>
+        <ValidationMessage For="@(() => TimetableData.ModuleCode)" />
+        <InputText class="form-control" @bind-Value="TimetableData.ModuleCode" />
+    </div>
+    <div class="my-3">
+        <label>Module Name</label>
+        <ValidationMessage For="@(() => TimetableData.ModuleName)" />
+        <InputText class="form-control" @bind-Value="TimetableData.ModuleName" />
+    </div>
+    <div class="my-3">
+        <label>Date</label>
+        <ValidationMessage For="@(() => TimetableData.Date)" />
+        <InputDate class="form-control" @bind-Value="TimetableData.Date" />
+    </div>
+    <div class="my-3">
+        <label>Start Time</label>
+        <ValidationMessage For="@(() => TimetableData.StartTime)" />
+        <InputTimeSpan class="form-control" @bind-Value="TimetableData.StartTime" />
+    </div>
+    <div class="my-3">
+        <label>End Time</label>
+        <ValidationMessage For="@(() => TimetableData.EndTime)" />
+        <InputTimeSpan class="form-control" @bind-Value="TimetableData.EndTime" />
+    </div>
+    <div class="my-3">
+        <label>Lecturer</label>
+        <ValidationMessage For="@(() => TimetableData.Lecturer)" />
+        <InputText class="form-control" @bind-Value="TimetableData.Lecturer" />
+    </div>
+
+    <div class="my-3">
+        <label>Room Number</label>
+        <InputSelect class="form-select" @bind-Value="SelectedSmallScreenId">
+            <option value="0" disabled>Select a room number</option>
+            @foreach (var smallScreen in SmallScreens)
+            {
+                <option value="@smallScreen.Id">@smallScreen.RoomNumber</option>
+            }
+        </InputSelect>
+    </div>
+
+
+    <div class="text-center">
+        <button type="submit" class="btn btn-primary mx-1">Save</button>
+        @if (@Mode == Mode.Edit)
+        {
+            <button type="button" class="btn btn-danger mx-1" @onclick="DeleteClicked">Delete</button>
+        }
+        @if (ShowErrorMessage)
+        {
+            <div class="alert alert-danger" role="alert">
+                @ErrorMessage
+            </div>
+        }
+    </div>
+</EditForm>
+
+@code {
+    public Timetable TimetableData { get; set; } = new Timetable();
+    public IList<SmallScreen> SmallScreens { get; set; } = new List<SmallScreen>();
+    public List<int> SelectedSmallScreenIds { get; set; } = new List<int>();
+    public int SelectedSmallScreenId { get; set; } = 0;
+    protected string ErrorMessage { get; set; } = string.Empty;
+    protected bool ShowErrorMessage { get; set; } = false;
+
+
+    protected async override Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        SmallScreens = await Context.SmallScreen.OrderBy(x => x.RoomNumber).ToListAsync();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        SmallScreens = await Context
+            .SmallScreen
+            .OrderBy(x => x.RoomNumber)
+            .ToListAsync();
+        if (Mode == Mode.Edit)
+        {
+            TimetableData = await Context
+                .Timetable
+                .Include(x => x.TimetableSmallScreens)
+                    .ThenInclude(ts => ts.SmallScreen)
+                .SingleOrDefaultAsync(x => x.Id == Id);
+            SelectedSmallScreenIds = TimetableData.TimetableSmallScreens.Select(ts => ts.SmallScreenId).ToList();
+
+            if (TimetableData.TimetableSmallScreens.Count > 0)
+            {
+                SelectedSmallScreenId = TimetableData.TimetableSmallScreens.First().SmallScreenId;
+            }
+        }
+        else if (Mode == Mode.Create)
+        {
+            TimetableData.Date = DateTime.Now;
+        }
+    }
+
+    public async Task HandleValidTimetableSubmit()
+    {
+        if (SelectedSmallScreenId > 0)
+        {
+            TimetableData.TimetableSmallScreens = new List<TimetableSmallScreen>
+        {
+            new TimetableSmallScreen
+            {
+                TimetableId = TimetableData.Id,
+                SmallScreenId = SelectedSmallScreenId
+            }
+        };
+        }
+
+        if (Mode == Mode.Create)
+        {
+            Context.Timetable.Add(TimetableData);
+        }
+        else
+        {
+            Context.Entry(TimetableData).State = EntityState.Modified;
+        }
+        await Context.SaveChangesAsync();
+        NavigationManager.NavigateTo("/Timetables");
+    }
+
+
+    public async Task DeleteClicked()
+    {
+        var delete = await JS.Confirm($"Delete Timetable {this.TimetableData.ModuleCode}?");
+        if (delete)
+        {
+            Context.Timetable.Remove(this.TimetableData);
+            await Context.SaveChangesAsync();
+            NavigationManager.NavigateTo("/Timetables");
+        }
+    }
+    private void UpdateSelectedSmallScreenIds(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int smallScreenId))
+        {
+            if (!SelectedSmallScreenIds.Contains(smallScreenId))
+            {
+                SelectedSmallScreenIds.Add(smallScreenId);
+            }
+        }
+    }
+
+}

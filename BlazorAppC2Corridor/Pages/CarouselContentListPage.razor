@@ -1,0 +1,99 @@
+﻿@attribute [Authorize(Roles = $"{Roles.Admin}, {Roles.BigScreen}")]
+@page "/Contents"
+@inherits PageBase
+@using System.Text.RegularExpressions
+
+
+<div class="text-center">
+    <h1>Content</h1>
+    <br>
+    <NavLink class="btn btn-primary btn-lg" href="@GetEditUrl()">Add new content</NavLink>
+</div>
+<br>
+<br>
+
+@if (CarouselContents == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Content Name</th>
+                <th>Content Type</th>
+                <th>Transition Type</th>
+                <th>Priority</th>
+                <th>Duration</th>
+                <th>Embargo Date</th>
+                <th>Expiry Date</th>
+                <th>Preview</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var carouselContent in CarouselContents)
+            {
+                <tr>
+                    <td>@carouselContent.ContentName</td>
+                    <td>@carouselContent.ContentType</td>
+                    <td>@carouselContent.TransitionType</td>
+                    <td>@carouselContent.Priority</td>
+                    <td>@carouselContent.Duration</td>
+                    <td>@carouselContent.EmbargoDate?.ToShortDateString()</td>
+                    <td>@carouselContent.ExpiryDate?.ToShortDateString()</td>
+                    <td>
+                        @if (carouselContent.File != null)
+                        {
+                            var fileContentType = GetFileContentType(carouselContent.File.ContentType);
+                            if (fileContentType == "image")
+                            {
+                                <img src="@carouselContent.File.GetUploadedFilePath()" alt="@carouselContent.File" style="max-width: 150px; max-height: 150px;" />
+                            }
+                            else if (fileContentType == "video")
+                            {
+                                <video width="200" controls>
+                                    <source src="@carouselContent.File.GetUploadedFilePath()" type="@carouselContent.File.ContentType">
+                                </video>
+                            }
+                        }
+                        @if (carouselContent.ContentType == ContentType.text)
+                        {
+                            <div style="max-width: 150px; max-height: 150px; overflow: auto;">
+                                <p>Layout Type: @carouselContent.LayoutType</p>
+                                <p>Font Type: @carouselContent.FontType</p>
+                                <p>Font Size: @carouselContent.FontSize</p>
+                            </div>
+                        }
+
+                    </td>
+
+                    <td>
+                        <NavLink class="btn btn-primary" href="@GetEditUrl(carouselContent.Id)">Edit</NavLink>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IList<CarouselContent>? CarouselContents { get; set; } = new List<CarouselContent>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        CarouselContents = Context
+       .CarouselContent
+       .Include(x => x.File)
+       .OrderBy(x => x.Priority).ToList();
+    }
+
+    public string GetEditUrl(int id = 0) => $"/Contents/{id}";
+
+    private string GetFileContentType(string contentType)
+    {
+        return contentType.Split('/')[0];
+    }
+}

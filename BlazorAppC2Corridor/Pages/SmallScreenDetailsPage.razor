@@ -1,0 +1,114 @@
+﻿@attribute [Authorize(Roles = $"{Roles.Admin}, {Roles.SmallScreen}")]
+@page "/SmallScreens/{Id:int}"
+@inherits EditablePageBase
+
+<h3>@Mode.ToString() SmallScreen </h3>
+<EditForm Model="SmallScreenData" OnValidSubmit="HandleValidSmallScreenSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    @if (@Mode == Mode.Edit)
+    {
+        <div class="my-3">
+            <label>Id</label>
+            <InputNumber class="form-control"
+                     @bind-Value="SmallScreenData.Id"
+                     readonly />
+        </div>
+    }
+    <div class="my-3">
+        <label>Room Number</label>
+        <ValidationMessage For="@(() => SmallScreenData.RoomNumber)" />
+        <InputText class="form-control" @bind-Value="SmallScreenData.RoomNumber" />
+    </div>
+    <div class="my-3">
+        <label>Room Name</label>
+        <ValidationMessage For="@(() => SmallScreenData.RoomName)" />
+        <InputText class="form-control" @bind-Value="SmallScreenData.RoomName" />
+    </div>
+
+    <div class="my-3">
+        <label>Bibliography</label>
+        <ValidationMessage For="@(() => SmallScreenData.Bibliography)" />
+        <InputText class="form-control" @bind-Value="SmallScreenData.Bibliography" />
+    </div>
+    <div class="my-3">
+        <label>
+            <InputCheckbox @bind-Value="SmallScreenData.IsStaffRoom" />
+            Staff Room
+        </label>
+    </div>
+
+    @if (SmallScreenData.IsStaffRoom)
+    {
+        <div class="my-3">
+            <label>Staff Name</label>
+            <ValidationMessage For="@(() => SmallScreenData.StaffName)" />
+            <InputText class="form-control" @bind-Value="SmallScreenData.StaffName" />
+        </div>
+    }
+
+    <div class="my-3">
+
+</div>
+
+    <div class="text-center">
+        <button type="submit" class="btn btn-primary mx-1">Save</button>
+        @if (@Mode == Mode.Edit)
+        {
+            <button type="button" class="btn btn-danger mx-1" @onclick="DeleteClicked">Delete</button>
+        }
+        @if (ShowErrorMessage)
+        {
+            <div class="alert alert-danger" role="alert">
+                @ErrorMessage
+            </div>
+        }
+    </div>
+</EditForm>
+
+@code {
+    public SmallScreen SmallScreenData { get; set; } = new SmallScreen();
+    protected string ErrorMessage { get; set; } = string.Empty;
+    protected bool ShowErrorMessage { get; set; } = false;
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        if (Mode == Mode.Edit)
+        {
+            var smallscreen = Context.SmallScreen.SingleOrDefault(x => x.Id == Id);
+            if (smallscreen != null)
+            {
+                SmallScreenData = smallscreen;
+            }
+        }
+    }
+
+
+    public async Task DeleteClicked()
+    {
+        var delete = await JS.Confirm($"Delete SmallScreen {this.SmallScreenData.RoomNumber}?");
+        if (delete)
+        {
+            Context.SmallScreen.Remove(this.SmallScreenData);
+            await Context.SaveChangesAsync();
+            NavigationManager.NavigateTo("/SmallScreens");
+        }
+    }
+    public async Task HandleValidSmallScreenSubmit()
+    {
+        if (Mode == Mode.Create)
+        {
+            Context.SmallScreen.Add(SmallScreenData);
+        }
+        else
+        {
+            Context.Entry(SmallScreenData).State = EntityState.Modified;
+        }
+        await Context.SaveChangesAsync();
+
+
+        NavigationManager.NavigateTo("/SmallScreens");
+    }
+
+}

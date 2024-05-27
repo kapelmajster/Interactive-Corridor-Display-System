@@ -1,0 +1,61 @@
+﻿@attribute [Authorize(Roles = $"{Roles.Admin}")]
+@page "/Users"
+@using BlazorAppC2Corridor.Views;
+@using Microsoft.AspNetCore.Identity;
+@inherits PageBase
+@inject UserManager<ApplicationUser> UserManager
+
+<div class="text-center">
+    <h1>User Management Panel</h1>
+    <br>
+    <AuthorizeView Roles="Admin">
+    <NavLink class="btn btn-primary btn-lg" href="@GetEditUrl("new")">Add new user</NavLink>
+    </AuthorizeView>
+</div>
+<br>
+
+@if (users == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+    <thead>
+    <tr>
+    <th>@nameof(UserSummary.Name)</th>
+    <th>@nameof(UserSummary.Email)</th>
+    <th></th>
+    </tr>
+    </thead>
+    <tbody>
+            @foreach (var user in users)
+            {
+        <tr>
+        <td>@user.Name</td>
+        <td>@user.Email</td>
+        <td><NavLink class="btn btn-primary" href="@GetEditUrl(user.Id)">Edit</NavLink></td>
+        </tr>
+            }
+    </tbody>
+    </table>
+}
+@code {
+    private IList<UserSummary>? users;
+    protected override async Task OnInitializedAsync()
+    {
+        users = UserManager
+        .Users
+        .OrderBy(u => u.Email)
+        .Select(u => new UserSummary(u))
+        .ToList();
+    }
+    public string GetEditUrl(string id)
+    {
+        if (CurrentUser.IsAdmin())
+        {
+            return $"/Users/{id}";
+        }
+        return NavigationManager.Uri;
+    }
+}

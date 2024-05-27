@@ -1,0 +1,44 @@
+﻿@inherits InputBase<TimeSpan>
+
+<input @attributes="AdditionalAttributes"
+       type="time"
+       value="@TimeSpanValue"
+       @oninput="UpdateTimeSpanValue" />
+
+@code {
+    private string TimeSpanValue
+    {
+        get => Value.ToString("hh\\:mm");
+        set
+        {
+            if (TimeSpan.TryParse(value, out var result))
+            {
+                CurrentValueAsString = value;
+            }
+        }
+    }
+
+    private void UpdateTimeSpanValue(ChangeEventArgs e)
+    {
+        TimeSpanValue = e.Value.ToString();
+    }
+
+    protected override bool TryParseValueFromString(string? value, out TimeSpan result, out string? validationErrorMessage)
+    {
+        if (TimeSpan.TryParse(value, out result))
+        {
+            validationErrorMessage = null;
+            return true;
+        }
+        else
+        {
+            validationErrorMessage = $"The {FieldIdentifier.FieldName} field must be a valid time.";
+            return false;
+        }
+    }
+
+    protected override string? FormatValueAsString(TimeSpan value)
+    {
+        return value.ToString("hh\\:mm");
+    }
+}

@@ -1,0 +1,299 @@
+﻿@attribute [Authorize(Roles = $"{Roles.Admin}, {Roles.BigScreen}")]
+@page "/Contents/{Id:int}"
+@inherits EditablePageBase
+@using BlazorAppC2Corridor.Models
+@using BlazorAppC2Corridor.Enums
+@using System.Text.RegularExpressions;
+@inject IJSRuntime JSRuntime
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.JSInterop
+@using BlazorAppC2Corridor.Data
+
+
+
+<h1>@Mode.ToString() Carousel Content</h1>
+<EditForm Model="CarouselContentData" OnValidSubmit="HandleValidCarouselContentSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    @if (@Id != 0)
+    {
+        <div class="my-3">
+            <label>Id</label>
+            <InputNumber class="form-control"
+                     @bind-Value="CarouselContentData.Id"
+                         readonly />
+        </div>
+    }
+    <div class="my-3">
+        <label>Content Type</label>
+        <ValidationMessage For="@(() => CarouselContentData.ContentType)" />
+        <InputSelect class="form-control" @bind-Value="CarouselContentData.ContentType">
+            <option value="0" disabled>Choose Media Type</option>
+            @foreach (var contentType in Enum.GetValues(typeof(ContentType)))
+            {
+                <option value="@contentType">@contentType</option>
+            }
+        </InputSelect>
+    </div>
+
+    <div class="my-3">
+        <label>Content Name</label>
+        <ValidationMessage For="@(() => CarouselContentData.ContentName)" />
+        <InputText class="form-control" @bind-Value="CarouselContentData.ContentName" />
+    </div>
+    <div class="my-3">
+        <label>Transition Type</label>
+        <ValidationMessage For="@(() => CarouselContentData.TransitionType)" />
+        <InputSelect @bind-Value="CarouselContentData.TransitionType" class="form-control">
+            <option value="0" disabled>Choose Transition Type</option>
+            @foreach (BlazorAppC2Corridor.Enums.Transition transition in Enum.GetValues(typeof(BlazorAppC2Corridor.Enums.Transition)))
+            {
+                <option value="@transition">@transition</option>
+            }
+
+        </InputSelect>
+    </div>
+    <div class="my-3">
+        <label>Priority</label>
+        <ValidationMessage For="@(() => CarouselContentData.Priority)" />
+        <InputNumber class="form-control" @bind-Value="CarouselContentData.Priority" />
+    </div>
+    <div class="my-3">
+        <label>Duration</label>
+        <ValidationMessage For="@(() => CarouselContentData.Duration)" />
+        <InputNumber class="form-control" @bind-Value="@DurationInSeconds" />
+    </div>
+
+    <div class="my-3">
+        <label>Embargo Date</label>
+        <ValidationMessage For="@(() => CarouselContentData.EmbargoDate)" />
+        <InputDate class="form-control" @bind-Value="CarouselContentData.EmbargoDate" />
+    </div>
+    <div class="my-3">
+        <label>Expiry Date</label>
+        <ValidationMessage For="@(() => CarouselContentData.ExpiryDate)" />
+        <InputDate class="form-control" @bind-Value="CarouselContentData.ExpiryDate" />
+    </div>
+
+    @if (CarouselContentData.ContentType != ContentType.text)
+    {
+        <div class="my-3">
+            <label>File</label>
+            <InputFile OnChange="@LoadCarouselContentFile" />
+        </div>
+        <div class="my-3">
+            <label>Preview</label>
+            <div>
+                @LoadFilePreview()
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="my-3">
+            <label>Text Content</label>
+            <ValidationMessage For="@(() => CarouselContentData.TextContent)" />
+            <InputTextArea class="form-control" @bind-Value="CarouselContentData.TextContent" style="height: 150px;" />
+        </div>
+        <div class="my-3">
+            <label>Layout Type</label>
+            <ValidationMessage For="@(() => CarouselContentData.LayoutType)" />
+            <InputSelect @bind-Value="CarouselContentData.LayoutType" class="form-control">
+                <option value="" disabled selected>Choose Layout Type</option>
+                @foreach (LayoutType layoutType in Enum.GetValues(typeof(LayoutType)))
+                {
+                    <option value="@layoutType">@layoutType</option>
+                }
+            </InputSelect>
+        </div>
+        <div class="form-group">
+            <label for="fontType">Font Type:</label>
+            <InputSelect @bind-Value="CarouselContentData.FontType" class="form-control" id="fontType">
+                @foreach (FontType fontType in Enum.GetValues(typeof(FontType)))
+                {
+                    <option value="@fontType">@fontType.ToString()</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="my-3">
+            <label>Font Size</label>
+            <InputNumber class="form-control" @bind-Value="CarouselContentData.FontSize" />
+        </div>
+    }
+    @if (CarouselContentData.File != null)
+    {
+        <button type="button" @onclick="@ClearExistingFile" class="btn btn-danger">Clear existing file</button>
+    }
+
+
+
+    <div class="text-center">
+        <button type="submit" class="btn btn-primary mx-1">Save</button>
+        @if (@Mode == Mode.Edit)
+        {
+            <button type="button" class="btn btn-danger mx-1" @onclick="DeleteClicked">Delete</button>
+        }
+        @if (ShowErrorMessage)
+        {
+            <div class="alert alert-danger">@ErrorMessage</div>
+        }
+    </div>
+</EditForm>
+
+@code {
+    public CarouselContent CarouselContentData { get; set; } = new CarouselContent();
+    protected string ErrorMessage { get; set; } = string.Empty;
+    protected bool ShowErrorMessage { get; set; } = false;
+
+
+    private double DurationInSeconds
+    {
+        get => CarouselContentData.Duration.TotalSeconds;
+        set => CarouselContentData.Duration = TimeSpan.FromSeconds(value);
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        CarouselContentData.Duration = TimeSpan.FromSeconds(20);
+        await JSRuntime.InvokeVoidAsync("eval", GetVideoDurationFunction);
+    }
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Mode == Mode.Edit)
+        {
+            CarouselContentData = await Context.CarouselContent
+                                .Include(x => x.File)
+                                .SingleOrDefaultAsync(x => x.Id == Id);
+        }
+    }
+
+    public async Task HandleValidCarouselContentSubmit()
+    {
+
+        TimeSpan durationToCompare = TimeSpan.FromSeconds(0);
+
+        if (CarouselContentData.Duration <= durationToCompare)
+        {
+            ErrorMessage = "Duration have to be more than 0.";
+            ShowErrorMessage = true;
+            return;
+        }
+
+        if (CarouselContentData.File != null && (!CarouselContentData.FileId.HasValue || CarouselContentData.FileId.Value != CarouselContentData.File.Id))
+        {
+            Context.File.Add(CarouselContentData.File);
+        }
+
+        if (Mode == Mode.Create)
+        {
+            Context.CarouselContent.Add(CarouselContentData);
+        }
+        else
+        {
+            Context.Entry(CarouselContentData).State = EntityState.Modified;
+        }
+
+        await Context.SaveChangesAsync();
+        NavigationManager.NavigateTo("/Contents");
+    }
+
+    public async Task DeleteClicked()
+    {
+        var delete = await JS.Confirm($"Delete Carousel Content {this.CarouselContentData.ContentName}?");
+        if (delete)
+        {
+            Context.CarouselContent.Remove(this.CarouselContentData);
+            await Context.SaveChangesAsync();
+            NavigationManager.NavigateTo("/Contents");
+        }
+    }
+
+    private async void LoadCarouselContentFile(InputFileChangeEventArgs e)
+    {
+        var uploadedFile = await e.File.ConvertToUploadedFileAsync();
+        if (uploadedFile != null)
+        {
+            
+            var path = Path.Combine("wwwroot", "Uploads", uploadedFile.Name);
+            using var fileStream = File.Create(path);
+            await e.File.OpenReadStream(52428800).CopyToAsync(fileStream);
+
+            CarouselContentData.File = uploadedFile;
+
+            if (GetFileContentType(uploadedFile.ContentType) == "video")
+            {
+                var fileUrl = CarouselContentData.File.ConvertToBrowserRenderableFile();
+                var duration = await JSRuntime.InvokeAsync<double>("getVideoDuration", fileUrl);
+                DurationInSeconds = duration;
+            }
+
+            StateHasChanged();
+        }
+    }
+
+
+    private void ClearExistingFile()
+    {
+        CarouselContentData.FileId = null;
+        CarouselContentData.File = null;
+        StateHasChanged();
+    }
+
+    private string GetFileContentType(string contentType)
+    {
+        return contentType.Split('/')[0];
+    }
+
+    private RenderFragment LoadFilePreview() => builder =>
+    {
+        if (CarouselContentData.File != null)
+        {
+            var fileContentType = GetFileContentType(CarouselContentData.File.ContentType);
+            if (fileContentType == "image")
+            {
+                builder.OpenElement(0, "img");
+                builder.AddAttribute(1, "class", "form_file_preview");
+                builder.AddAttribute(2, "src", CarouselContentData.File.ConvertToBrowserRenderableFile());
+                builder.AddAttribute(3, "style", "max-width: 150px; max-height: 150px;");
+                builder.CloseElement();
+            }
+            else if (fileContentType == "video")
+            {
+                builder.OpenElement(0, "video");
+                builder.AddAttribute(1, "width", "320");
+                builder.AddAttribute(2, "controls", true);
+                builder.OpenElement(3, "source");
+                builder.AddAttribute(4, "src", CarouselContentData.File.ConvertToBrowserRenderableFile());
+                builder.AddAttribute(5, "type", CarouselContentData.File.ContentType);
+                builder.CloseElement();
+                builder.CloseElement();
+            }
+        }
+    };
+
+    private static string GetVideoDurationFunction = @"
+    async function getVideoDuration(url) {
+        return new Promise((resolve, reject) => {
+            const video = document.createElement('video');
+            video.src = url;
+            video.preload = 'metadata';
+            video.onloadedmetadata = () => {
+                resolve(video.duration);
+            };
+            video.onerror = () => {
+                reject('Error loading video metadata');
+            };
+        });
+    }
+";
+
+
+}

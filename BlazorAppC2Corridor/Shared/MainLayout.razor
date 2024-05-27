@@ -1,0 +1,36 @@
+﻿@using BlazorAppC2Corridor.Services;
+@using ModifyLayoutExample.Services;
+@inherits LayoutComponentBase
+@inject ViewTailoringService ViewTailoring
+
+<PageTitle>C2 Corridor Management Panel</PageTitle>
+
+<MudThemeProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div class="page">
+    <div class="sidebar @ViewTailoring.GetDisplayStatus(ToggledElements.NavigationBarArea)">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4 auth @ViewTailoring.GetDisplayStatus(ToggledElements.LoginAboutArea)">
+            <LoginDisplay />
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        ViewTailoring.OnChanged += async (ToggledElements elementToggled) =>
+        {
+            await InvokeAsync(StateHasChanged);
+        };
+    }
+}

@@ -1,0 +1,92 @@
+﻿@attribute [Authorize(Roles = $"{Roles.Admin}, {Roles.SmallScreen}")]
+@page "/SmallScreens"
+@using BlazorAppC2Corridor.Services;
+@using Microsoft.EntityFrameworkCore.Metadata.Internal;
+@using ModifyLayoutExample.Services;
+@inherits PageBase
+@inject ViewTailoringService ViewTailoring
+
+<h3>
+    Choose screen to view
+    <br>
+</h3>
+<div class="text-left">
+    <AuthorizeView Roles="@($"{Roles.Admin}, {Roles.SmallScreen}")">
+        <NavLink class="btn btn-outline-primary btn-lg mr-2" href="/SmallScreens">Small Screen</NavLink>
+    </AuthorizeView>
+    <AuthorizeView Roles="@($"{Roles.Admin}, {Roles.BigScreen}")">
+        <NavLink class="btn btn-outline-primary btn-lg ml-2" href="/BigScreens">Big Screen</NavLink>
+    </AuthorizeView>
+</div>
+
+<br>
+
+
+<div class="text-center">
+    <h1>Small Screens Management Panel</h1>
+    <br>
+    <NavLink class="btn btn-primary btn-lg" href="@GetEditUrl()">Add new screen</NavLink>
+</div>
+<br>
+<br>
+@if (SmallScreens == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+
+                <th>Room Number</th>
+                <th>Room Name</th>
+                <th>Bibliography</th>
+                <th>Staff Name</th>
+                <th></th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var smallscreen in SmallScreens)
+            {
+                <tr>
+                    <td>@smallscreen.RoomNumber</td>
+                    <td>@smallscreen.RoomName</td>
+                    <td>@smallscreen.Bibliography</td>
+                    <td>@smallscreen.StaffName</td>
+                    <td>
+                        <NavLink class="btn btn-primary" href="@GetEditUrl(smallscreen.Id)">Edit</NavLink>
+                    </td>
+                    <td>
+                        <button class="btn btn-success" @onclick="() => DisplaySmallScreen(smallscreen.Id)">
+                            Display
+                        </button>
+
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+@code {
+    private IList<SmallScreen>? SmallScreens { get; set; } = new List<SmallScreen>();
+    [Inject]
+    private NavigationManager NavigationManager { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        SmallScreens = Context.SmallScreen.Include(s => s.TimetableSmallScreens).ThenInclude(ts => ts.Timetable).ToList();
+    }
+
+    private void DisplaySmallScreen(int id)
+    {
+        NavigationManager.NavigateTo(GetDisplayUrl(id));
+        ViewTailoring.ToggleElement(ToggledElements.NavigationBarArea);
+        ViewTailoring.ToggleElement(ToggledElements.LoginAboutArea);
+    }
+
+    public string GetEditUrl(int id = 0) => $"/SmallScreens/{id}";
+    public string GetDisplayUrl(int id) => $"/SmallScreens/Display/{id}";
+}

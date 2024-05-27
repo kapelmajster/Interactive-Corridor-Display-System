@@ -1,0 +1,77 @@
+﻿@attribute [Authorize(Roles = $"{Roles.Admin}, {Roles.SmallScreen}")]
+@page "/Timetables"
+@inherits PageBase
+
+
+
+<div class="text-center">
+    <h1>Timetable</h1>
+    <br>
+    <NavLink class="btn btn-primary btn-lg" href="@GetEditUrl()">Add new timetable</NavLink>
+</div>
+<br>
+@if (timetables == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Module Code</th>
+                <th>Module Name</th>
+                <th>Date</th>
+                <th>Start Time</th>
+                <th>End Time</th>
+                <th>Lecturer</th>
+                <th>Room Number</th>
+                <th></th>
+                <th></th>
+
+
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var timetable in timetables)
+            {
+                <tr>
+                    <td>@timetable.ModuleCode</td>
+                    <td>@timetable.ModuleName</td>
+                    <td>@timetable.Date.ToShortDateString()</td>
+                    <td>@timetable.StartTime.ToString(@"hh\:mm")</td>
+                    <td>@timetable.EndTime.ToString(@"hh\:mm")</td>
+                    <td>@timetable.Lecturer</td>
+                    <td>
+                        @foreach (var smallScreen in timetable.TimetableSmallScreens.Select(ts => ts.SmallScreen))
+                        {
+                            @smallScreen.RoomNumber
+
+                            <br />
+                        }
+                    </td>
+                    <td>
+                        <NavLink class="btn btn-primary" href="@GetEditUrl(timetable.Id)">Edit</NavLink>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IList<Timetable>? timetables;
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        timetables = await Context
+        .Timetable
+        .Include(t => t.TimetableSmallScreens)
+        .ThenInclude(ts => ts.SmallScreen)
+        .ToListAsync();
+    }
+    public string GetEditUrl(int id = 0)
+    {
+        return $"/Timetables/{id}";
+    }
+}

@@ -1,0 +1,19 @@
+﻿@attribute [Authorize]
+@page "/"
+@page "/Screens"
+
+<h3>Choose screen to view
+    <br>
+</h3>
+<div class="text-left">
+    <AuthorizeView Roles="@($"{Roles.Admin}, {Roles.SmallScreen}")">
+    <NavLink class="btn btn-outline-primary btn-lg mr-2" href="/SmallScreens">Small Screen</NavLink>
+    </AuthorizeView>
+    <AuthorizeView Roles="@($"{Roles.Admin}, {Roles.BigScreen}")">
+    <NavLink class="btn btn-outline-primary btn-lg ml-2" href="/BigScreens">Big Screen</NavLink>
+    </AuthorizeView>
+</div>
+
+@code {
+
+}

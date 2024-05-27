@@ -1,0 +1,140 @@
+﻿@attribute [Authorize(Roles = $"{Roles.Admin}, {Roles.BigScreen}")]
+@page "/BigScreens/{Id:int}"
+@inherits EditablePageBase
+
+
+<h3>@Mode.ToString() Big Screen</h3>
+<EditForm Model="BigScreenData" OnValidSubmit="HandleValidBigScreenSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    @if (@Mode == Mode.Edit)
+    {
+        <div class="my-3">
+            <label>Screen ID</label>
+            <InputNumber class="form-control"
+                     @bind-Value="BigScreenData.Id"
+                     readonly />
+        </div>
+    }
+    <div class="my-3">
+        <label>Screen Location</label>
+        <ValidationMessage For="@(() => BigScreenData.Location)" />
+        <InputText class="form-control" @bind-Value="BigScreenData.Location" />
+    </div>
+    <div class="my-3">
+        <label>Carousel Contents</label>
+        <div class="border px-1">
+            @foreach (var cc in CarouselContents)
+            {
+                <div>
+                    <InputCheckbox @bind-Value="@cc.IsSelected" class="form-check-input" />
+                    <label>@cc.ContentName - @cc.ContentType</label>
+                </div>
+            }
+        </div>
+    </div>
+    <div class="text-center">
+        <button type="submit" class="btn btn-primary mx-1">Save</button>
+        @if (@Mode == Mode.Edit)
+        {
+            <button type="button" class="btn btn-danger mx-1" @onclick="DeleteClicked">Delete</button>
+        }
+        @if (ShowErrorMessage)
+        {
+            <div class="alert alert-danger" role="alert">
+                @ErrorMessage
+            </div>
+        }
+    </div>
+</EditForm>
+
+@code {
+    public BigScreen BigScreenData { get; set; } = new BigScreen();
+    public IList<CarouselContent> CarouselContents { get; set; } = new List<CarouselContent>();
+    public List<int> SelectedCarouselContentIds { get; set; } = new List<int>();
+    protected string ErrorMessage { get; set; } = string.Empty;
+    protected bool ShowErrorMessage { get; set; } = false;
+    
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        CarouselContents = await Context.CarouselContent.ToListAsync();
+    }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        if (Mode == Mode.Edit)
+        {
+            BigScreenData = await Context.BigScreen.Include(x => x.BigScreenCarousels).SingleOrDefaultAsync(x => x.Id == Id);
+            SelectedCarouselContentIds = BigScreenData.BigScreenCarousels.Select(cc => cc.CarouselContentId).ToList();
+        }
+
+    }
+
+    public async Task DeleteClicked()
+    {
+        var delete = await JS.Confirm($"Delete Big Screen {this.BigScreenData.Id}?");
+        if (delete)
+        {
+            Context.BigScreen.Remove(this.BigScreenData);
+            await Context.SaveChangesAsync();
+            NavigationManager.NavigateTo("/BigScreens");
+        }
+    }
+    public async Task HandleValidBigScreenSubmit()
+    {
+        if (BigScreenData == null)
+        {
+            ErrorMessage = "The BigScreenData object is null.";
+            ShowErrorMessage = true;
+            return;
+        }
+
+        if (CarouselContents != null)
+        {
+            SelectedCarouselContentIds = CarouselContents.Where(cc => cc.IsSelected).Select(cc => cc.Id).ToList();
+        }
+        else
+        {
+            ErrorMessage = "The CarouselContents list is null.";
+            ShowErrorMessage = true;
+            return;
+        }
+
+        if (BigScreenData.BigScreenCarousels != null)
+        {
+            BigScreenData.BigScreenCarousels.Clear();
+        }
+
+        foreach (var id in SelectedCarouselContentIds)
+        {
+            var selectedCarouselContent = await Context.CarouselContent.FindAsync(id);
+            if (selectedCarouselContent != null)
+            {
+                BigScreenData.BigScreenCarousels.Add(new BigScreenCarousel
+                    {
+                        BigScreenId = BigScreenData.Id,
+                        CarouselContentId = selectedCarouselContent.Id,
+                        CarouselContent = selectedCarouselContent
+                    });
+            }
+        }
+
+        if (Mode == Mode.Create)
+        {
+            Context.BigScreen.Add(BigScreenData);
+        }
+        else
+        {
+            Context.Entry(BigScreenData).State = EntityState.Modified;
+        }
+
+        await Context.SaveChangesAsync();
+        NavigationManager.NavigateTo("/BigScreens");
+    }
+
+
+}

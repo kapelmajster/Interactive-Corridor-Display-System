@@ -1,0 +1,95 @@
+﻿@attribute [Authorize(Roles = $"{Roles.Admin}, {Roles.BigScreen}")]
+@page "/BigScreens"
+@using ModifyLayoutExample.Services;
+@inherits PageBase
+@inject ViewTailoringService ViewTailoring
+
+<h3>
+    Choose screen to view
+    <br>
+</h3>
+<div class="text-left">
+    <AuthorizeView Roles="@($"{Roles.Admin}, {Roles.SmallScreen}")">
+        <NavLink class="btn btn-outline-primary btn-lg mr-2" href="/SmallScreens">Small Screen</NavLink>
+    </AuthorizeView>
+    <AuthorizeView Roles="@($"{Roles.Admin}, {Roles.BigScreen}")">
+        <NavLink class="btn btn-outline-primary btn-lg ml-2" href="/BigScreens">Big Screen</NavLink>
+    </AuthorizeView>
+</div>
+
+<br>
+
+
+<div class="text-center">
+    <h1>Big Screens Management Panel</h1>
+    <br>
+    <NavLink class="btn btn-primary btn-lg" href="@GetEditUrl()">Add new screen</NavLink>
+</div>
+<br>
+<br>
+
+@if (BigScreens == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>@nameof(BigScreen.Location)</th>
+                <th>Carousel Content</th>
+                <th></th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var bigscreen in BigScreens)
+            {
+                <tr>
+                    <td>@bigscreen.Location</td>
+                    <td>
+                        @if (bigscreen.BigScreenCarousels != null)
+                        {
+                            foreach (var content in bigscreen.BigScreenCarousels)
+                            {
+                                <div>@content.CarouselContent.ContentName (@content.CarouselContent.ContentType)</div>
+                            }
+                        }
+                    </td>
+                    <td>
+                        <NavLink class="btn btn-primary" href="@GetEditUrl(bigscreen.Id)">Edit</NavLink>
+                    </td>
+                    <td>
+                        <button class="btn btn-success" @onclick="() => DisplayBigScreen(bigscreen.Id)">
+                            Display
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IList<BigScreen>? BigScreens { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        BigScreens = await Context.BigScreen.Include(bs => bs.BigScreenCarousels)
+                                            .ThenInclude(bsc => bsc.CarouselContent).ToListAsync();
+
+    }
+
+    private void DisplayBigScreen(int id)
+    {
+        NavigationManager.NavigateTo(GetDisplayUrl(id));
+        ViewTailoring.ToggleElement(ToggledElements.NavigationBarArea);
+        ViewTailoring.ToggleElement(ToggledElements.LoginAboutArea);
+    }
+
+    public string GetEditUrl(int id = 0) => $"/BigScreens/{id}";
+    public string GetDisplayUrl(int id) => $"/BigScreens/Display/{id}";
+
+}

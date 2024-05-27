@@ -1,0 +1,214 @@
+﻿@page "/SmallScreens/Display/{Id}"
+@inject ApplicationDbContext Context
+@inject NavigationManager NavigationManager
+@using BlazorAppC2Corridor.Models
+@using System.Linq
+@using ModifyLayoutExample.Services;
+@inject ViewTailoringService ViewTailoring
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+@inherits ComponentBase
+@implements IDisposable
+
+@if (smallScreen != null)
+{
+    <div class="static-view">
+        <button style="logo" @onclick="DisplaySmallScreen">
+            <img class="logo" src="/UOB.png" />
+        </button>
+        <div class="room-number"> @smallScreen.RoomNumber</div>
+        <div class="room-name"> @smallScreen.RoomName</div>
+        <h5>Bibliography</h5>
+        <div class="bibliography"> @smallScreen.Bibliography</div>
+    </div>
+
+    @if (smallScreen.IsStaffRoom)
+    {
+        <div class="current-timetable">
+            <div class="timetable-header-current">
+                <div>Staff Room</div>
+            </div>
+            <div class="timetable-item">
+                <div>@smallScreen.StaffName</div>
+            </div>
+        </div>
+    }
+    else if (timetableSmallScreens.Count > 0 && timetableSmallScreens[0].Timetable.ModuleCode != "N/A")
+    {
+        <div class="timetable-title">
+            <h3>Current Timetable</h3>
+        </div>
+        <div class="current-timetable">
+            <div class="timetable-header-current">
+                <div>Module Code</div>
+                <div>Module Name</div>
+                <div>Date</div>
+                <div>Start</div>
+                <div>End</div>
+                <div>Lecturer</div>
+            </div>
+            @foreach (var timetableSmallScreen in timetableSmallScreens.Take(1))
+            {
+                var timetable = timetableSmallScreen.Timetable;
+                <div class="timetable-item">
+                    <div>@timetable.ModuleCode</div>
+                    <div>@timetable.ModuleName</div>
+                    <div>@timetable.Date.ToString("dd-MM-yyyy")</div>
+                    <div>@timetable.StartTime.ToString(@"hh\:mm")</div>
+                    <div>@timetable.EndTime.ToString(@"hh\:mm")</div>
+                    <div>@timetable.Lecturer</div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="timetable-title gap">
+            <h3>Current Timetable</h3>
+        </div>
+        <div class="no-class gap">
+            <h3>There are currently no classes</h3>
+        </div>
+    }
+
+
+    @if (timetableSmallScreens.Count > 1)
+    {
+        <div class="timetable-title">
+            <h3>Next Timetable</h3>
+        </div>
+        <div class="next-timetable">
+            <div class="timetable-header-next">
+                <div>Module Code</div>
+                <div>Module Name</div>
+                <div>Date</div>
+                <div>Start</div>
+                <div>End</div>
+                <div>Lecturer</div>
+            </div>
+            @foreach (var timetableSmallScreen in timetableSmallScreens.Skip(1))
+            {
+                var timetable = timetableSmallScreen.Timetable;
+                <div class="timetable-item">
+                    <div>@timetable.ModuleCode</div>
+                    <div>@timetable.ModuleName</div>
+                    <div>@timetable.Date.ToString("dd-MM-yyyy")</div>
+                    <div>@timetable.StartTime.ToString(@"hh\:mm")</div>
+                    <div>@timetable.EndTime.ToString(@"hh\:mm")</div>
+                    <div>@timetable.Lecturer</div>
+                </div>
+            }
+        </div>
+    }
+}
+
+else
+{
+    <p><em>Loading...</em></p>
+}
+
+<div class="filler"></div>
+
+@code {
+    [Parameter] public string Id { get; set; }
+    private SmallScreen? smallScreen;
+    private List<TimetableSmallScreen>? timetableSmallScreens;
+    private System.Timers.Timer _timer;
+
+
+    private RenderFragment GetTimetableRow(TimetableSmallScreen timetableSmallScreen)
+    {
+        var timetable = timetableSmallScreen.Timetable;
+        return builder =>
+        {
+            builder.OpenElement(0, "div");
+            builder.AddAttribute(1, "class", "timetable-row");
+            builder.AddContent(2, $"{timetable.ModuleCode} | {timetable.ModuleName} | {timetable.Date.ToString("yyyy-MM-dd")} | {timetable.StartTime.ToString(@"hh\:mm")} | {timetable.EndTime.ToString(@"hh\:mm")} | {timetable.Lecturer}");
+            builder.CloseElement();
+        };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("loadCssFile", "css/SmallScreenDisplay.css");
+        }
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        JSRuntime.InvokeVoidAsync("unloadCssFile", "css/SmallScreenDisplay.css");
+    }
+
+
+    private async Task RefreshTimetable(int parsedId)
+    {
+        smallScreen = await Context.SmallScreen.FindAsync(parsedId);
+        var allTimetableSmallScreens = Context.TimetableSmallScreen
+            .Include(tss => tss.Timetable)
+            .Where(tss => tss.SmallScreenId == parsedId)
+            .OrderBy(tss => tss.Timetable.Date)
+            .ThenBy(tss => tss.Timetable.StartTime)
+            .ToList();
+
+        DateTime currentTime = DateTime.Now;
+        Console.WriteLine($"Current Time: {currentTime}");
+
+        var currentTimetable = allTimetableSmallScreens.FirstOrDefault(tss =>
+            tss.Timetable.Date == currentTime.Date &&
+            tss.Timetable.StartTime <= currentTime.TimeOfDay &&
+            tss.Timetable.EndTime >= currentTime.TimeOfDay
+        );
+
+        var nextTimetable = allTimetableSmallScreens.FirstOrDefault(tss =>
+            (tss.Timetable.Date == currentTime.Date && tss.Timetable.StartTime > currentTime.TimeOfDay) ||
+            tss.Timetable.Date > currentTime.Date
+        );
+
+        timetableSmallScreens = new List<TimetableSmallScreen>();
+
+        if (currentTimetable != null)
+        {
+            timetableSmallScreens.Add(currentTimetable);
+        }
+        else
+        {
+            timetableSmallScreens.Add(new TimetableSmallScreen { Timetable = new Timetable { ModuleCode = "N/A", ModuleName = "No classes", Date = DateTime.MinValue, StartTime = TimeSpan.MinValue, EndTime = TimeSpan.MinValue, Lecturer = "N/A" } });
+        }
+
+        if (nextTimetable != null)
+        {
+            timetableSmallScreens.Add(nextTimetable);
+        }
+
+        await InvokeAsync(() =>
+        {
+            StateHasChanged();
+        });
+    }
+
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (int.TryParse(Id, out int parsedId))
+        {
+            await RefreshTimetable(parsedId);
+            _timer = new System.Timers.Timer(60000);
+            _timer.Elapsed += async (sender, e) => await RefreshTimetable(parsedId);
+            _timer.Start();
+        }
+    }
+
+
+    private void DisplaySmallScreen()
+    {
+        ViewTailoring.ToggleElement(ToggledElements.NavigationBarArea);
+        ViewTailoring.ToggleElement(ToggledElements.LoginAboutArea);
+    }
+
+    public string GetDisplayUrl(int id) => $"/SmallScreens/Display/{id}";
+
+}

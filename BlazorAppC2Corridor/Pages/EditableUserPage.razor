@@ -1,0 +1,210 @@
+﻿@attribute [Authorize(Roles = $"{Roles.Admin}")]
+@page "/Users/{Id}"
+@using BlazorAppC2Corridor.Views;
+@using Microsoft.AspNetCore.Identity;
+@inherits PageBase
+@inject UserManager<ApplicationUser> UserManager
+@inject RoleManager<IdentityRole> RoleManager
+
+
+
+
+<h3>@Mode.ToString() User </h3>
+<EditForm Model="UserData" OnValidSubmit="HandleValidUserSubmit">
+    <DataAnnotationsValidator />
+    @if (@Mode == Mode.Edit)
+    {
+        <div class="form-group">
+            <label>Id</label>
+            <InputText class="form-control"
+                   @bind-Value="UserData.Id"
+                   readonly />
+        </div>
+    }
+    <div class="form-group">
+        <label>Email</label>
+        <ValidationMessage For="@(() => UserData.Email)" />
+        <InputText class="form-control" @bind-Value="UserData.Email" />
+    </div>
+    <div class="form-group">
+        <label>First Name</label>
+        <ValidationMessage For="@(() => UserData.FirstName)" />
+        <InputText class="form-control" @bind-Value="UserData.FirstName" />
+    </div>
+    <div class="form-group">
+        <label>Last Name</label>
+        <ValidationMessage For="@(() => UserData.LastName)" />
+        <InputText class="form-control" @bind-Value="UserData.LastName" />
+    </div>
+    <div class="form-group">
+        <label>Roles</label>
+    </div>
+    <div class="form-group">
+        <label>Admin</label>
+        <InputCheckbox @bind-Value="UserData.Admin" disabled="@UserDataIsCurrentUser()" />
+        <label>Small Screen</label>
+        <InputCheckbox @bind-Value="UserData.SmallScreen" />
+        <label>Big Screen</label>
+        <InputCheckbox @bind-Value="UserData.BigScreen" />
+    </div>
+    <div class="form-group">
+        <label>Password</label>
+        <ValidationMessage For="@(() => UserData.Password)" />
+        <InputText class="form-control" @bind-Value="UserData.Password" type="password" />
+    </div>
+    <div class="form-group">
+        <label>Confirm Password</label>
+        <ValidationMessage For="@(() => UserData.PasswordConfirmation)" />
+        <InputText class="form-control" @bind-Value="UserData.PasswordConfirmation" type="password" />
+    </div>
+    <div class="form-group">
+        <label>Enabled</label>
+        <InputCheckbox @bind-Value="UserData.Enabled" disabled="@UserDataIsCurrentUser()" />
+    </div>
+    <div class="text-center">
+        <button type="submit" class="btn btn-primary mx-1">Save</button>
+    </div>
+</EditForm>
+
+@code {
+    [Parameter]
+    public string Id { get; set; }
+    public Mode Mode => Id.ToLower() == "new" ? Mode.Create : Mode.Edit;
+    public EditableUser UserData { get; set; } = new EditableUser();
+    public bool UserDataIsCurrentUser()
+    {
+        if (UserData.Id == CurrentUser.GetUserId())
+        {
+            return true;
+        }
+        return false;
+    }
+    protected async override Task OnParametersSetAsync()
+    {
+        if (Mode == Mode.Edit)
+        {
+            var user = await UserManager.FindByIdAsync(Id);
+            if (user == null)
+            {
+                throw new Exception($"User with Id of {Id} not found");
+            }
+            var userRoles = await UserManager.GetRolesAsync(user);
+            this.UserData = new EditableUser()
+                {
+                    Id = user.Id,
+                    Email = user.Email,
+                    FirstName = user.Firstname,
+                    LastName = user.Lastname,
+                    Enabled = !user.LockoutEnabled,
+                    Admin = userRoles.Contains(Roles.Admin),
+                    SmallScreen = userRoles.Contains(Roles.SmallScreen),
+                    BigScreen = userRoles.Contains(Roles.BigScreen)
+                };
+        }
+    }
+    public async Task HandleValidUserSubmit()
+    {
+        if (!string.IsNullOrEmpty(UserData.Password)
+        && !string.IsNullOrEmpty(UserData.PasswordConfirmation)
+        && (UserData.Password != UserData.PasswordConfirmation))
+        {
+            await this.JS.Alert("Passwords do not match!");
+            return;
+        }
+        if ((string.IsNullOrEmpty(UserData.Password) || string.IsNullOrEmpty(UserData.PasswordConfirmation))
+        && string.IsNullOrEmpty(UserData.Id))
+        {
+            await this.JS.Alert("Passwords must be provided when creating a new account!");
+            return;
+        }
+        bool success = false;
+        try
+        {
+            if (UserData != null && !string.IsNullOrEmpty(UserData.Id))
+            {
+                var user = await UserManager.FindByIdAsync(Id);
+                if (user == null)
+                {
+                    throw new Exception($"User with Id of {Id} not found");
+                }
+                user.UserName = user.Email = UserData.Email;
+                user.Firstname = UserData.FirstName;
+                user.Lastname = UserData.LastName;
+                await this.AddOrRemoveRolesFromUser(user);
+                await UserManager.SetLockoutEnabledAsync(user, !UserData.Enabled);
+                if (!string.IsNullOrEmpty(UserData.Password))
+                {
+                    var resetPasswordToken = await UserManager.GeneratePasswordResetTokenAsync(user);
+                    await UserManager.ResetPasswordAsync(user, resetPasswordToken, UserData.Password);
+                }
+                success = (await UserManager.UpdateAsync(user)).Succeeded;
+            }
+            else
+            {
+                var user = await UserManager.FindByNameAsync(UserData.Email);
+                if (user != null)
+                {
+                    throw new Exception($"User with email of {UserData.Email} already exists!");
+                }
+                user = new ApplicationUser()
+                    {
+                        Email = UserData.Email,
+                        SecurityStamp = Guid.NewGuid().ToString(),
+                        UserName = UserData.Email,
+                        Firstname = UserData.FirstName,
+                        Lastname = UserData.LastName
+                    };
+                success = (await UserManager.CreateAsync(user, UserData.Password)).Succeeded;
+                if (!success)
+                {
+                    throw new Exception("User creation failed! Please check user details and try again.");
+                }
+                await this.AddOrRemoveRolesFromUser(user);
+                await UserManager.SetLockoutEnabledAsync(user, !UserData.Enabled);
+            }
+            if (success)
+            {
+                NavigationManager.NavigateTo("/Users");
+            }
+        }
+        catch (Exception ex)
+        {
+            await this.JS.Alert($"Error - Operation failed! {ex.Message}");
+        }
+    }
+    private async Task AddOrRemoveRolesFromUser(ApplicationUser user)
+    {
+        await this.AddOrRemoveRoleFromUserAsync(user, Roles.Admin, UserData.Admin);
+        await this.AddOrRemoveRoleFromUserAsync(user, Roles.SmallScreen, UserData.SmallScreen);
+        await this.AddOrRemoveRoleFromUserAsync(user, Roles.BigScreen, UserData.BigScreen);
+    }
+    private async Task<bool> AddOrRemoveRoleFromUserAsync(ApplicationUser user, string role, bool addUserToRole)
+    {
+        // check stated role actually exists
+        if (!RoleManager.Roles.Select(r => r.Name).Contains(role))
+        {
+            return false;
+        }
+        // get list of roles assigned to this user
+        var userRoles = await UserManager.GetRolesAsync(user);
+        // check to see if user already in role. you cannot remove a user from a role they're already in and you cannot add them to a role twice
+        var alreadyInRole = userRoles.Contains(role);
+        // add or remove the role from user as necessary
+        bool success = false;
+        if (addUserToRole && !alreadyInRole)
+        {
+            var ir = await UserManager.AddToRoleAsync(user, role);
+            success = ir.Succeeded;
+        }
+        else if (!addUserToRole && alreadyInRole)
+        {
+            var ir = await UserManager.RemoveFromRoleAsync(user, role);
+            success = ir.Succeeded;
+        }
+        else
+        {
+            success = true;
+        }
+        return success;
+    }
+}
